@@ -1,0 +1,97 @@
+---
+title: "R Notebook"
+output: html_notebook
+author: Bhoj Rani Soopal 
+---
+
+## Load Dataset 
+```{r}
+library(readxl)
+setwd("/Users/divyashie/Desktop/project_timeSeries")
+df <- read_excel("COVID-19-geographic-disbtribution-worldwide-2020-03-28.xlsx")
+View(df)
+```
+
+
+## Cleaning Dataset 
+```{r}
+library(dplyr)
+names(df) #find names of columns 
+df[!complete.cases(df),] #list rows of data with missing values
+df <- na.omit(df) #remove missing values 
+unique(df$year)
+```
+
+## Analysis 
+```{r}
+#Calculate death rate per country 
+death_stats = df %>% group_by(countriesAndTerritories, popData2018) %>% summarise(total_death=sum(deaths))
+death_stats$death_rate = (death_stats$total_death/ death_stats$popData2018) * 1000000000
+death_stats$countriesAndTerritories <- gsub("_", " ", death_stats$countriesAndTerritories)
+head(death_stats)
+```
+
+```{r}
+death_stats[death_stats$total_death ==0,]   #Show countries with zero death
+death_stats <- death_stats[death_stats$total_death != 0,] #remove the zero cases
+head(death_stats)
+```
+
+
+```{r}
+summary(death_stats)
+```
+
+## Visualization
+```{r}
+library(tidyverse)
+library(sf)
+library(rvest)
+library(stringr)
+library(scales)
+
+map.world <- map_data('world')  #Get World Map 
+anti_join(death_stats, map.world, by = c('countriesAndTerritories' = 'region'))  #check for mismatches 
+map.world %>% group_by(region) %>% summarise() %>% print(n=Inf)
+
+death_stats <- death_stats %>%  ungroup(countriesAndTerritories) %>% mutate(countriesAndTerritories= recode(countriesAndTerritories, 'Cases on an international conveyance Japan' = 'Japan','Curaçao' = 'Curacao', 'North Macedonia' = 'Macedonia', 'Trinidad and Tobago' = 'Trinidad', 'United Kingdom' = 'UK', 'United States of America' = 'USA' ))
+
+map.death <- left_join(map.world, death_stats, by=c('region' = 'countriesAndTerritories') ) #join the dataset 
+
+ggplot(map.death, aes( x = long, y = lat, group = group )) +
+  geom_polygon(aes(fill = total_death)) +
+  scale_fill_gradientn(colours = c('#461863','#404E88','#2A8A8C','#7FD157','#F9E53F')
+                       ,values = scales::rescale(c(100,96581,822675,3190373,10000000))
+                       ,labels = comma
+                       ,breaks = c(100,2000,4500,7000,9000)
+                       ) +
+  guides(fill = guide_legend(reverse = T)) +
+  labs(fill = 'total death'
+       ,title = 'Coronavirus death cases by Country'
+       ,subtitle = 'Death cases, 2019/2020'
+       ,x = NULL
+       ,y = NULL) +
+  theme(text = element_text(family = 'Gill Sans', color = '#EEEEEE')
+        ,plot.title = element_text(size = 28)
+        ,plot.subtitle = element_text(size = 14)
+        ,axis.ticks = element_blank()
+        ,axis.text = element_blank()
+        ,panel.grid = element_blank()
+        ,panel.background = element_rect(fill = '#333333')
+        ,plot.background = element_rect(fill = '#333333')
+        ,legend.position = c(.18,.36)
+        ,legend.background = element_blank()
+        ,legend.key = element_blank()
+        ) +
+  annotate(geom = 'text'
+           ,label = 'Source: COVID-19-geographic-disbtribution-worldwide-2020-03-28'
+           ,x = 18, y = -55
+           ,size = 3
+           ,family = 'Gill Sans'
+           ,color = '#CCCCCC'
+           ,hjust = 'left'
+           )
+
+```
+
+
